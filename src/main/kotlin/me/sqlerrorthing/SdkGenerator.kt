@@ -1,20 +1,26 @@
 package me.sqlerrorthing
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import me.sqlerrorthing.parser.impl.TinyMappingParser
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import java.io.File
 import java.util.concurrent.Callable
+import kotlin.io.path.div
 
 /**
  * Represents the configuration for the SDK generator.
  *
  * @property verbose Indicates whether verbose output is enabled. Default is false.
+ * @property generateJson Convert output sdk to .json
  * @property mappings The file containing the .yarn mappings used to generate C++ code.
  * @property outFolder The output folder where the generated Minecraft SDK will be saved. Default is a "sdk" folder in the current directory.
  */
 data class Config(
     val verbose: Boolean = false,
+    val generateJson: Boolean = false,
     val mappings: File,
     val outFolder: File,
 )
@@ -38,6 +44,12 @@ class CLIConfig {
      */
     @CommandLine.Option(names = ["-v", "--verbose"])
     var verbose: Boolean = false
+
+    /**
+     * Convert output sdk to .json
+     */
+    @CommandLine.Option(names = ["-j", "--json"])
+    var generateJson: Boolean = false
 
     /**
      * The output folder where the generated Minecraft SDK will be saved.
@@ -71,6 +83,7 @@ class CLIConfig {
 
         return Config(
             verbose = verbose,
+            generateJson = generateJson,
             mappings = mappings,
             outFolder = outFolder,
         )
@@ -80,5 +93,14 @@ class CLIConfig {
 fun main(args: Array<String>) {
     val config = CLIConfig().also { CommandLine(it).parseArgs(*args) }.asConfigFile()
 
-    println(TinyMappingParser.parse(config))
+    Configurator.setRootLevel(if (config.verbose) Level.DEBUG else Level.INFO)
+
+    val parsed = TinyMappingParser.parse(config)
+
+    if (config.generateJson) {
+        val out = config.outFolder.toPath() / "mapping.json"
+        jacksonObjectMapper()
+            .writerWithDefaultPrettyPrinter()
+            .writeValue(out.toFile(), parsed)
+    }
 }

@@ -1,10 +1,12 @@
 package me.sqlerrorthing.parser.impl
 
 import me.sqlerrorthing.Config
+import me.sqlerrorthing.ast.Access
 import me.sqlerrorthing.ast.IClass
 import me.sqlerrorthing.ast.IField
 import me.sqlerrorthing.ast.Named
 import me.sqlerrorthing.parser.MappingParser
+import me.sqlerrorthing.utils.AccessFlags
 
 private const val CLASS_PREFIX_START = 'c'
 
@@ -22,6 +24,7 @@ object TinyMappingParser : MappingParser {
         line: List<String>,
         `class`: IClass,
     ) {
+        val (access, final, static) = parseFieldNMethodFlags(line[3].toInt())
         val field =
             IField(
                 name =
@@ -32,9 +35,38 @@ object TinyMappingParser : MappingParser {
                         yarn = line.getOrNull(9),
                         searge = line.getOrNull(10),
                     ),
+                structure = line.getOrNull(1) ?: "",
+                access = access,
+                final = final,
+                static = static,
             )
 
         `class`.fields.add(field)
+    }
+
+    /**
+     * Parses the field/method flags to determine the access level, whether it's final and whether it's static.
+     *
+     * @param flags The integer representation of the flags.
+     * @return A Triple representing the access level, finality and staticness of the field/method.
+     *         The first element of the Triple is the access level, which is an enumeration value of type Access.
+     *         The second and third elements of the Triple are boolean values representing whether the field/method is final and static, respectively.
+     */
+    private fun parseFieldNMethodFlags(flags: Int): Triple<Access, Boolean, Boolean> {
+        val access =
+            when {
+                AccessFlags.isPublic(flags) -> Access.PUBLIC
+                AccessFlags.isPrivate(flags) -> Access.PRIVATE
+                AccessFlags.isProtected(flags) -> Access.PROTECTED
+                AccessFlags.isPackagePrivate(flags) -> Access.DEFAULT
+                else -> TODO("Fix me, access flag not found $flags")
+            }
+
+        return Triple(
+            access,
+            AccessFlags.isFinal(flags),
+            AccessFlags.isStatic(flags),
+        )
     }
 
     override fun parse(config: Config): List<IClass> {

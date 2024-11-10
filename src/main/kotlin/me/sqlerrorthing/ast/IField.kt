@@ -2,7 +2,8 @@ package me.sqlerrorthing.ast
 
 class IField(
     var name: Named = Named(),
-    var type: String = "",
-    var flags: MutableList<Flags> = emptyList<Flags>().toMutableList(),
-    var access: MutableList<Access> = emptyList<Access>().toMutableList(),
+    var structure: String = "",
+    var static: Boolean,
+    var `final`: Boolean,
+    var access: Access = Access.PUBLIC,
 ) : IAST

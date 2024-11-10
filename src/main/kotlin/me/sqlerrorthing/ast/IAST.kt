@@ -4,12 +4,7 @@ enum class Access {
     DEFAULT,
     PUBLIC,
     PROTECTED,
-    PRIVATE
-}
-
-enum class Flags {
-    STATIC,
-    FINAL
+    PRIVATE,
 }
 
 interface IAST
