@@ -17,8 +17,17 @@ object TinyMappingParser : MappingParser {
     ) {
         when (line[0]) {
             "f" -> parseClassField(line, `class`)
+            "m" -> parseClassMethod(line, `class`)
         }
     }
+
+    private fun parseClassMethod(
+        line: List<String>,
+        `class`: IClass,
+    ) {
+
+    }
+
 
     private fun parseClassField(
         line: List<String>,
@@ -79,7 +88,11 @@ object TinyMappingParser : MappingParser {
                     classes.add(classHolder!!)
                 }
 
-                classHolder = IClass()
+                val (access, final, _) = parseFieldNMethodFlags(line[3].code)
+                classHolder = IClass(
+                    access = access,
+                    final = final,
+                )
 
                 val parts = line.trim().split("\t")
                 classHolder?.name =

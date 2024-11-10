@@ -1,6 +1,8 @@
 package me.sqlerrorthing
 
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import me.sqlerrorthing.generator.impl.CPPGenerator
 import me.sqlerrorthing.parser.impl.TinyMappingParser
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.core.config.Configurator
@@ -97,10 +99,15 @@ fun main(args: Array<String>) {
 
     val parsed = TinyMappingParser.parse(config)
 
+    CPPGenerator.generate(config, parsed)
+
     if (config.generateJson) {
         val out = config.outFolder.toPath() / "mapping.json"
-        jacksonObjectMapper()
-            .writerWithDefaultPrettyPrinter()
+        jacksonObjectMapper().let {
+            it.enable(SerializationFeature.INDENT_OUTPUT)
+
+            it.writerWithDefaultPrettyPrinter()
             .writeValue(out.toFile(), parsed)
+        }
     }
 }
