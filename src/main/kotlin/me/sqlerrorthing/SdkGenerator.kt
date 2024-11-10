@@ -1,12 +1,10 @@
 package me.sqlerrorthing
 
-import me.sqlerrorthing.ast.Named
 import me.sqlerrorthing.parser.impl.TinyMappingParser
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import java.io.File
 import java.util.concurrent.Callable
-import kotlin.properties.Delegates
 
 /**
  * Represents the configuration for the SDK generator.
@@ -27,10 +25,14 @@ data class Config(
  * This class implements [Callable] and is responsible for parsing command-line arguments
  * and creating a [Config] object based on those arguments.
  */
-@Command(name = "generator", helpCommand = true, mixinStandardHelpOptions = true, version = ["1.0.0"],
-    description = ["Generates c++ SDK code for minecraft using tiny mappings. to further simplify the development of the chat"])
+@Command(
+    name = "generator",
+    helpCommand = true,
+    mixinStandardHelpOptions = true,
+    version = ["1.0.0"],
+    description = ["Generates c++ SDK code for minecraft using tiny mappings. to further simplify the development of the chat"],
+)
 class CLIConfig {
-
     /**
      * Indicates whether verbose output is enabled.
      */
@@ -40,7 +42,12 @@ class CLIConfig {
     /**
      * The output folder where the generated Minecraft SDK will be saved.
      */
-    @CommandLine.Option(names = ["-o", "--output"], paramLabel = "OUTPUT", description = ["the output folder with generated minecraft sdk"], required = false)
+    @CommandLine.Option(
+        names = ["-o", "--output"],
+        paramLabel = "OUTPUT",
+        description = ["the output folder with generated minecraft sdk"],
+        required = false,
+    )
     var outFolder: File = File("sdk-out")
 
     /**
@@ -56,25 +63,22 @@ class CLIConfig {
      * @throws IllegalStateException if the provided mappings file is not a valid file.
      */
     fun asConfigFile(): Config {
-
-        if(!mappings.isFile)
+        if (!mappings.isFile) {
             throw IllegalStateException("Provided mappings is not a file")
+        }
 
         outFolder.mkdirs()
 
-        return Config (
+        return Config(
             verbose = verbose,
             mappings = mappings,
-            outFolder = outFolder
+            outFolder = outFolder,
         )
-
     }
-
 }
 
 fun main(args: Array<String>) {
     val config = CLIConfig().also { CommandLine(it).parseArgs(*args) }.asConfigFile()
 
     println(TinyMappingParser.parse(config))
-
 }

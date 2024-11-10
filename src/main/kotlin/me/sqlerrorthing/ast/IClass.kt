@@ -1,7 +1,7 @@
 package me.sqlerrorthing.ast
 
-data class IClass (
+data class IClass(
     var name: Named = Named(),
-    var fields: List<IField> = listOf(),
-    var methods: List<IMethod> = listOf()
+    var fields: MutableList<IField> = mutableListOf(),
+    var methods: MutableList<IMethod> = mutableListOf(),
 ) : IAST
