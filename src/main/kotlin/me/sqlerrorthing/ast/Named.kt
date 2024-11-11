@@ -1,14 +1,19 @@
 package me.sqlerrorthing.ast
 
 data class Named(
-    val obfuscated: String? = null,
-    val mojang: String? = null,
-    val intermediary: String? = null,
-    val yarn: String? = null,
-    val searge: String? = null,
+    val obfuscated: String? = "",
+    val mojang: String? = "",
+    val intermediary: String? = "",
+    val yarn: String? = "",
+    val searge: String? = "",
+    var nameWithoutCollision: String? = null
 ) {
 
-    val original: String get()  {
+    val isInit: Boolean
+        get() = listOf(obfuscated, mojang, intermediary, yarn, searge).contains("<init>")
+
+
+    val original: String get() {
         val parts = normalName.split("/")
         when (parts.size) {
             1 -> return normalName

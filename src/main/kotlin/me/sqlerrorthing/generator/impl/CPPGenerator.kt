@@ -3,6 +3,7 @@ package me.sqlerrorthing.generator.impl
 import me.sqlerrorthing.Config
 import me.sqlerrorthing.ast.IClass
 import me.sqlerrorthing.ast.IField
+import me.sqlerrorthing.ast.IMethod
 import me.sqlerrorthing.generator.Generator
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -72,6 +73,11 @@ object CPPGenerator : Generator {
         sb.appendLine()
         sb.appendLine()
 
+        val (obfuscated, mojang, intermediary, yarn, searge) = `class`.name
+        val mappedParams = """
+            "$obfuscated", "$mojang", "$intermediary", "$yarn", "$searge"
+            """.trimIndent()
+
         sb.append("""
             /*
              * Minecraft class
@@ -81,13 +87,13 @@ object CPPGenerator : Generator {
             class ${`class`.name.original} final {
             public:
                 static jclass self() {
-                    return _self == nullptr ? _self = ${BASE_NAMESPACE}::env->FindClass("${`class`.name.obfuscated }") : _self;
+                    return _self == nullptr ? _self = ${BASE_NAMESPACE}::env->FindClass(MinecraftSDK::getRemapped($mappedParams)) : _self;
                 };
             
         """.trimIndent())
         sb.appendLine()
         insertFields(sb, `class`)
-
+        insertMethods(sb, `class`)
 
         sb.appendLine("""
             
@@ -102,36 +108,99 @@ object CPPGenerator : Generator {
         dstFile.writeText(sb.toString())
     }
 
+    private fun insertMethods(sb: StringBuilder, `class`: IClass) {
+        `class`.methods.forEach { insertMethod(sb, it, `class`) }
+    }
+
     private fun insertFields(sb: StringBuilder, `class`: IClass) {
         `class`.fields.forEach { insertField(sb, it, `class`) }
     }
 
     private fun insertField(sb: StringBuilder, field: IField, `class`: IClass) {
 
-        if(!field.static)
-            return
-
         val (cppType, second, third) = parseFieldJNIString(field)
         val isGetOrIs = if(cppType == "jboolean") "is" else "get"
 
-        val fieldName = field.name.original
-        val fieldNameUpper = fieldName.upperFirstLetter()
+        val (obfuscated, mojang, intermediary, yarn, searge) = field.name
+        val mappedParams = """
+            "$obfuscated", "$mojang", "$intermediary", "$yarn", "$searge"
+            """.trimIndent()
+
+        if(field.static)
+            sb.append("""
+                |
+                |    // getter for static ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
+                |    [[maybe_unused]] static $cppType get_field_${field.name.nameWithoutCollision}() {
+                |        const auto clazz = self();
+                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetStaticFieldID(clazz, MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return ${BASE_NAMESPACE}::env->${second}(clazz, fieldID);
+                |    };
+                |
+                |    // setter for static ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
+                |    [[maybe_unused]] static void set_field_${field.name.nameWithoutCollision}(const $cppType &value) {
+                |        const auto clazz = self();
+                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetStaticFieldID(clazz, MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return ${BASE_NAMESPACE}::env->${third}(clazz, fieldID, value);
+                |    };
+                |
+            """.trimMargin())
+        else {
+            sb.append("""
+                |
+                |    // getter for ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
+                |    static $cppType get_field_${field.name.nameWithoutCollision}(const jobject &obj) {
+                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetFieldID(self(), MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return ${BASE_NAMESPACE}::env->${second}(obj, fieldID);
+                |    };
+                |
+                |    // setter for static ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
+                |    static void set_field_${field.name.nameWithoutCollision}(const jobject &obj, const $cppType &value) {
+                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetFieldID(self(), MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return ${BASE_NAMESPACE}::env->${third}(obj, fieldID, value);
+                |    };
+                |
+            """.trimMargin())
+        }
+    }
+
+    private fun insertMethod(sb: StringBuilder, method: IMethod, `class`: IClass) {
+
+        val (obfuscated, mojang, intermediary, yarn, searge) = method.name
+
+        val mappedParams = """
+            "$obfuscated", "$mojang", "$intermediary", "$yarn", "$searge"
+            """.trimIndent()
+
+
+        if(method.name.isInit)
+            return
+
+        val (argsTypes, result) = method.parsedDescriptor
+
+        val args = argsTypes.mapIndexed { index, arg -> "const $arg&" to "arg$index" }.toMutableList()
+
+        if (!method.static) {
+            args.addFirst("const jobject&" to "obj")
+        }
+        val static = if(method.static) "Static" else ""
+        val call = if(method.static) "clazz" else "obj"
+
+        val argsString = args.joinToString(", ") { "${it.first} ${it.second}" }
+        val argsNames = args.joinToString(", ") { it.second }
 
         sb.append("""
-            |    static $cppType $isGetOrIs$fieldNameUpper() {
-            |        const auto clazz = self();
-            |        const auto fieldID = ${BASE_NAMESPACE}::env->GetStaticFieldID(clazz, "${field.name.obfuscated}", "${field.descriptor}");
-            |        return ${BASE_NAMESPACE}::env->${second}(clazz, fieldID);
-            |    };
-            |
-            |    static void set$fieldNameUpper(const $cppType &value) {
-            |        const auto clazz = self();
-            |        const auto fieldID = ${BASE_NAMESPACE}::env->GetStaticFieldID(clazz, "${field.name.obfuscated}", "${field.descriptor}");
-            |        return ${BASE_NAMESPACE}::env->${third}(clazz, fieldID, value);
-            |    };
-            |
-        """.trimMargin())
+                |
+                |    static $result ${method.name.nameWithoutCollision}($argsString) {
+                |       const auto clazz = self();
+                |       const auto methodID = ${BASE_NAMESPACE}::env->Get${static}MethodID(clazz, MinecraftSDK::getRemapped($mappedParams), "${method.descriptor}");
+                |       ${if(result != "void") "return " else ""}${BASE_NAMESPACE}::env->Call$static${if(result == "void") "Void" else result.drop(1).upperFirstLetter()}Method($call, methodID${if (args.isNotEmpty()) ", " else ""}$argsNames);
+                |    };
+                |    
+            """.trimMargin())
+
+
     }
+
 
     private fun parseFieldJNIString(field: IField): Triple<String, String, String> {
         val get = "Get" + (if (field.static) "Static" else "")
@@ -187,25 +256,53 @@ object CPPGenerator : Generator {
             |
             |namespace $BASE_NAMESPACE {
             |
-            |static JavaVM* vm {nullptr};
-            |static JNIEnv* env {nullptr};
-            |
-            |static int InitializeSDK() {
-            |    jsize count;
-            |
-            |    if (JNI_GetCreatedJavaVMs(&vm, 1, &count) != JNI_OK || count == 0) {
-            |        return JNI_ERR;
+            |    enum Mappings {
+            |        OBFUSCATED,
+            |        MOJANG,
+            |        INTERMEDIARY,
+            |        YARN,
+            |        SEARGE
+            |    };
+            | 
+            |    static Mappings selectedMapping;
+            |    static JavaVM* vm {nullptr};
+            |    static JNIEnv* env {nullptr};
+            |    
+            |    static const char *getRemapped(
+            |        const char *obfuscated,
+            |        const char *mojang,
+            |        const char *intermediary,
+            |        const char *yarn,
+            |        const char *searge
+            |    ) {
+            |        switch (selectedMapping) {
+            |            case OBFUSCATED: return obfuscated;
+            |            case MOJANG: return mojang;
+            |            case INTERMEDIARY: return intermediary;
+            |            case YARN: return yarn;
+            |            case SEARGE: return searge;
+            |        }
+            | 
+            |        return obfuscated; // if not found...
             |    }
-            |
-            |    if (jint result = vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION); result == JNI_EDETACHED) {
-            |      	if (result = vm->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr); result != JNI_OK) {
-            |      	    return JNI_ERR;
-            |      	}
+            |    
+            |    static int InitializeSDK(const Mappings &mapping = OBFUSCATED) {
+            |        jsize count;
+            |    
+            |        if (JNI_GetCreatedJavaVMs(&vm, 1, &count) != JNI_OK || count == 0) {
+            |            return JNI_ERR;
+            |        }
+            |    
+            |        if (jint result = vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION); result == JNI_EDETACHED) {
+            |          	if (result = vm->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr); result != JNI_OK) {
+            |          	    return JNI_ERR;
+            |          	}
+            |        }
+            | 
+            |        selectedMapping = mapping;
+            |        return JNI_OK;
             |    }
-            |
-            |    return JNI_OK;
-            |}
-            |
+            |    
             |}
             |
             |$endDef

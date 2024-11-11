@@ -1,10 +1,7 @@
 package me.sqlerrorthing.parser.impl
 
 import me.sqlerrorthing.Config
-import me.sqlerrorthing.ast.Access
-import me.sqlerrorthing.ast.IClass
-import me.sqlerrorthing.ast.IField
-import me.sqlerrorthing.ast.Named
+import me.sqlerrorthing.ast.*
 import me.sqlerrorthing.parser.MappingParser
 import me.sqlerrorthing.utils.AccessFlags
 
@@ -25,7 +22,22 @@ object TinyMappingParser : MappingParser {
         line: List<String>,
         `class`: IClass,
     ) {
+        val (access, final, static) = parseFieldNMethodFlags(line[3].toInt())
+        val method = IMethod(
+            name = Named(
+                obfuscated = line.getOrNull(2),
+                mojang = line.getOrNull(7),
+                intermediary = line.getOrNull(8),
+                yarn = line.getOrNull(9),
+                searge = line.getOrNull(10),
+            ),
+            descriptor = line[1],
+            access = access,
+            final = final,
+            static = static,
+        )
 
+        `class`.methods.add(method)
     }
 
 
@@ -110,6 +122,24 @@ object TinyMappingParser : MappingParser {
             }
         }
 
+        resolveNameCollisions(classes)
         return classes
+    }
+
+    private fun resolveNameCollisions(classes: MutableList<IClass>) {
+        for (clazz in classes) {
+            val usedNames = mutableSetOf<String>()
+            
+            fun resolveCollision(named: Named) {
+                named.nameWithoutCollision = named.nameWithoutCollision ?: named.original
+                while (usedNames.contains(named.nameWithoutCollision)) {
+                    named.nameWithoutCollision = "_${named.nameWithoutCollision}"
+                }
+                usedNames.add(named.nameWithoutCollision!!)
+            }
+    
+            clazz.fields.forEach { resolveCollision(it.name) }
+            clazz.methods.forEach { resolveCollision(it.name) }
+        }
     }
 }
