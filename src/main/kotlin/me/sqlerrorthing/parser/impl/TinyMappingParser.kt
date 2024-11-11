@@ -44,7 +44,7 @@ object TinyMappingParser : MappingParser {
                         yarn = line.getOrNull(9),
                         searge = line.getOrNull(10),
                     ),
-                structure = line.getOrNull(1) ?: "",
+                descriptor = line.getOrNull(1) ?: "",
                 access = access,
                 final = final,
                 static = static,

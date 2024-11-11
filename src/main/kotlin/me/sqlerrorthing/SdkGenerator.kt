@@ -110,4 +110,9 @@ fun main(args: Array<String>) {
             .writeValue(out.toFile(), parsed)
         }
     }
+
+    println("Generated SDK in ${config.outFolder}")
+    for(clazz in parsed) {
+        println("#include <${clazz.name.normalName}.hpp>")
+    }
 }
