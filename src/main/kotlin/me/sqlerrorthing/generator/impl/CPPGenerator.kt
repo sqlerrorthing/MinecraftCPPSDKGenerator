@@ -253,6 +253,22 @@ object CPPGenerator : Generator {
             |${includes.joinToString(separator = "\n")}
             |#endif
             |
+            |#define JSTRING_TO_STD_STRING(jObj) \
+            |    ([&]() -> std::string { \
+            |        jstring jstr = static_cast<jstring>(jObj); \
+            |        const char *nativeString = $BASE_NAMESPACE::env->GetStringUTFChars(jstr, nullptr); \
+            |        std::string cppString(nativeString); \
+            |        struct ReleaseString { \
+            |            JNIEnv* env; \
+            |            jstring jstr; \
+            |            const char* nativeString; \
+            |            ~ReleaseString() { \
+            |                env->ReleaseStringUTFChars(jstr, nativeString); \
+            |            } \
+            |        } release{$BASE_NAMESPACE::env, jstr, nativeString}; \
+            |        return cppString; \
+            |    })()
+            |
             |namespace $BASE_NAMESPACE {
             |
             |    enum Mappings {
