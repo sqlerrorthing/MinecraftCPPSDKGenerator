@@ -12,6 +12,7 @@ import java.util.*
 
 
 private const val BASE_HEADER_NAME = "sdk.hpp"
+private const val BASE_CPP_NAME = "sdk.cpp"
 private const val JNI_INCLUDE = "#include <jni.h>"
 private const val BASE_INCLUDE = "#include <sdk.hpp>"
 private const val BASE_NAMESPACE = "MinecraftSDK"
@@ -42,6 +43,7 @@ object CPPGenerator : Generator {
     override fun generate(config: Config, parsed: List<IClass>) {
         logger.debug("Generating base.hpp")
         (config.outFolder / BASE_HEADER_NAME).writeText(generateBaseHeaderFile(parsed))
+        (config.outFolder / BASE_CPP_NAME).writeText(generateBaseCppFile())
 
         parsed.forEach {
             try {
@@ -246,6 +248,14 @@ object CPPGenerator : Generator {
         }
     }
 
+    private fun generateBaseCppFile(): String = """
+        #include "sdk.hpp"
+
+        MinecraftSDK::Mappings MinecraftSDK::selectedMapping = MinecraftSDK::OBFUSCATED;
+        JavaVM* MinecraftSDK::vm = nullptr;
+        JNIEnv* MinecraftSDK::env = nullptr;
+    """.trimIndent()
+
     private fun generateBaseHeaderFile(classes: List<IClass>): String {
         val (startDef, endDef) = appendDefinitionHeaderName("MINECRAFT_SDK_BASE")
 
@@ -259,10 +269,6 @@ object CPPGenerator : Generator {
             |$JNI_INCLUDE
             |#define JNI_VERSION JNI_VERSION_1_6
             |
-            |// use `#define INCLUDE_ALL_CLASSES` to include all possible classes at once
-            |#ifdef INCLUDE_ALL_CLASSES
-            |${includes.joinToString(separator = "\n")}
-            |#endif
             |
             |#define JSTRING(str) ($BASE_NAMESPACE::env)->NewStringUTF(str)
             |
@@ -282,8 +288,8 @@ object CPPGenerator : Generator {
             |        return cppString; \
             |    })()
             |
-            |namespace $BASE_NAMESPACE {
-            |
+            |class $BASE_NAMESPACE {
+            |public:
             |    enum Mappings {
             |        OBFUSCATED,
             |        MOJANG,
@@ -293,8 +299,9 @@ object CPPGenerator : Generator {
             |    };
             | 
             |    static Mappings selectedMapping;
-            |    static JavaVM* vm {nullptr};
-            |    static JNIEnv* env {nullptr};
+            |
+            |    static JavaVM* vm;
+            |    static JNIEnv* env;
             |    
             |    static const char *getRemapped(
             |        const char *obfuscated,
@@ -334,7 +341,7 @@ object CPPGenerator : Generator {
             |        return JNI_OK;
             |    }
             |    
-            |}
+            |};
             |
             |$endDef
             |
