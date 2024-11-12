@@ -84,10 +84,9 @@ object CPPGenerator : Generator {
              * Original: ${`class`.name.dottedNormalName}
              * Remapped: ${`class`.name.obfuscated}
              */
-            class ${`class`.name.original} final {
-            public:
+            namespace ${`class`.name.original} {
                 static jclass self() {
-                    return _self == nullptr ? _self = ${BASE_NAMESPACE}::env->FindClass(MinecraftSDK::getRemapped($mappedParams)) : _self;
+                    return ${BASE_NAMESPACE}::env->FindClass(MinecraftSDK::getRemapped($mappedParams));
                 };
             
         """.trimIndent())
@@ -95,12 +94,7 @@ object CPPGenerator : Generator {
         insertFields(sb, `class`)
         insertMethods(sb, `class`)
 
-        sb.appendLine("""
-            
-            private:
-                static jclass _self;
-            };
-        """.trimIndent())
+        sb.appendLine("};")
         sb.appendLine()
 
 
@@ -190,9 +184,14 @@ object CPPGenerator : Generator {
 
         sb.append("""
                 |
+                |    static jmethodID methodID_${method.name.nameWithoutCollision}() {
+                |       const auto clazz = self();
+                |       return ${BASE_NAMESPACE}::env->Get${static}MethodID(clazz, MinecraftSDK::getRemapped($mappedParams), "${method.descriptor}");
+                |    }
+                |
                 |    static $result ${method.name.nameWithoutCollision}($argsString) {
                 |       const auto clazz = self();
-                |       const auto methodID = ${BASE_NAMESPACE}::env->Get${static}MethodID(clazz, MinecraftSDK::getRemapped($mappedParams), "${method.descriptor}");
+                |       const auto methodID = methodID_${method.name.nameWithoutCollision}();
                 |       ${if(result != "void") "return " else ""}${BASE_NAMESPACE}::env->Call$static${if(result == "void") "Void" else result.drop(1).upperFirstLetter()}Method($call, methodID${if (args.isNotEmpty()) ", " else ""}$argsNames);
                 |    };
                 |    
@@ -246,13 +245,13 @@ object CPPGenerator : Generator {
             |
             |$startDef
             |
-            |// define INCLUDE_ALL_CLASSES to connect all possible classes at once
+            |$JNI_INCLUDE
+            |#define JNI_VERSION JNI_VERSION_1_6
+            |
+            |// use `#define INCLUDE_ALL_CLASSES` to include all possible classes at once
             |#ifdef INCLUDE_ALL_CLASSES
             |${includes.joinToString(separator = "\n")}
             |#endif
-            |
-            |$JNI_INCLUDE
-            |#define JNI_VERSION JNI_VERSION_1_6
             |
             |namespace $BASE_NAMESPACE {
             |
@@ -292,9 +291,12 @@ object CPPGenerator : Generator {
             |        if (JNI_GetCreatedJavaVMs(&vm, 1, &count) != JNI_OK || count == 0) {
             |            return JNI_ERR;
             |        }
+            |        
+            |        JavaVMAttachArgs attach_args;
+            |        attach_args.version = JNI_VERSION;
             |    
             |        if (jint result = vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION); result == JNI_EDETACHED) {
-            |          	if (result = vm->AttachCurrentThread(reinterpret_cast<void **>(&env), nullptr); result != JNI_OK) {
+            |          	if (result = vm->AttachCurrentThread(reinterpret_cast<void **>(&env), &attach_args); result != JNI_OK) {
             |          	    return JNI_ERR;
             |          	}
             |        }
