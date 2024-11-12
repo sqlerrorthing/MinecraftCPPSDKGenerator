@@ -86,15 +86,18 @@ object CPPGenerator : Generator {
              */
             namespace ${`class`.name.original} {
                 static jclass self() {
-                    return ${BASE_NAMESPACE}::env->FindClass(MinecraftSDK::getRemapped($mappedParams));
+                    static jclass cachedClass = nullptr;
+                    if (cachedClass == nullptr) {
+                        cachedClass = ${BASE_NAMESPACE}::env->FindClass(MinecraftSDK::getRemapped($mappedParams));
+                    }
+                    return cachedClass;
                 };
-            
         """.trimIndent())
         sb.appendLine()
         insertFields(sb, `class`)
         insertMethods(sb, `class`)
 
-        sb.appendLine("};")
+        sb.appendLine("\n};")
         sb.appendLine()
 
 
@@ -180,7 +183,15 @@ object CPPGenerator : Generator {
         val call = if(method.static) "clazz" else "obj"
 
         val argsString = args.joinToString(", ") { "${it.first} ${it.second}" }
-        val argsNames = args.joinToString(", ") { it.second }
+        var argsNames = args.joinToString(", ") { it.second }
+
+        fun updateArgs(): Boolean {
+            if(!method.static && args.isNotEmpty()) {
+                args.removeFirst();
+                argsNames = args.joinToString(", ") { it.second }
+            }
+            return true;
+        }
 
         sb.append("""
                 |
@@ -190,9 +201,9 @@ object CPPGenerator : Generator {
                 |    }
                 |
                 |    static $result ${method.name.nameWithoutCollision}($argsString) {
-                |       const auto clazz = self();
+                ${if(call == "clazz") "|       const auto clazz = self();" else ""}
                 |       const auto methodID = methodID_${method.name.nameWithoutCollision}();
-                |       ${if(result != "void") "return " else ""}${BASE_NAMESPACE}::env->Call$static${if(result == "void") "Void" else result.drop(1).upperFirstLetter()}Method($call, methodID${if (args.isNotEmpty()) ", " else ""}$argsNames);
+                |       ${if(result != "void") "return " else ""}${BASE_NAMESPACE}::env->Call$static${if(result == "void") "Void" else result.drop(1).upperFirstLetter()}Method($call, methodID${if (updateArgs() && args.isNotEmpty()) ", " else ""}$argsNames);
                 |    };
                 |    
             """.trimMargin())
@@ -252,6 +263,8 @@ object CPPGenerator : Generator {
             |#ifdef INCLUDE_ALL_CLASSES
             |${includes.joinToString(separator = "\n")}
             |#endif
+            |
+            |#define JSTRING(str) ($BASE_NAMESPACE::env)->NewStringUTF(str)
             |
             |#define JSTRING_TO_STD_STRING(jObj) \
             |    ([&]() -> std::string { \
