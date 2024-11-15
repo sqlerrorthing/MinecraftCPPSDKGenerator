@@ -87,10 +87,14 @@ object CPPGenerator : Generator {
              * Remapped: ${`class`.name.obfuscated}
              */
             namespace ${`class`.name.original} {
-                static jclass self() {
+                static jclass findAlwaysSelf(JNIEnv* _env = ${BASE_NAMESPACE}::env) {
+                    return _env->FindClass(MinecraftSDK::getRemapped($mappedParams));
+                };
+            
+                static jclass self(JNIEnv* _env = ${BASE_NAMESPACE}::env) {
                     static jclass cachedClass = nullptr;
                     if (cachedClass == nullptr) {
-                        cachedClass = ${BASE_NAMESPACE}::env->FindClass(MinecraftSDK::getRemapped($mappedParams));
+                        cachedClass = findAlwaysSelf(_env);
                     }
                     return cachedClass;
                 };
@@ -129,17 +133,17 @@ object CPPGenerator : Generator {
             sb.append("""
                 |
                 |    // getter for static ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
-                |    [[maybe_unused]] static $cppType get_field_${field.name.nameWithoutCollision}() {
+                |    [[maybe_unused]] static $cppType get_field_${field.name.nameWithoutCollision}(JNIEnv* _env = ${BASE_NAMESPACE}::env) {
                 |        const auto clazz = self();
-                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetStaticFieldID(clazz, MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
-                |        return ${BASE_NAMESPACE}::env->${second}(clazz, fieldID);
+                |        const auto fieldID = _env->GetStaticFieldID(clazz, MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return _env->${second}(clazz, fieldID);
                 |    };
                 |
                 |    // setter for static ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
-                |    [[maybe_unused]] static void set_field_${field.name.nameWithoutCollision}(const $cppType &value) {
+                |    [[maybe_unused]] static void set_field_${field.name.nameWithoutCollision}(const $cppType &value, JNIEnv* _env = ${BASE_NAMESPACE}::env) {
                 |        const auto clazz = self();
-                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetStaticFieldID(clazz, MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
-                |        return ${BASE_NAMESPACE}::env->${third}(clazz, fieldID, value);
+                |        const auto fieldID = _env->GetStaticFieldID(clazz, MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return _env->${third}(clazz, fieldID, value);
                 |    };
                 |
             """.trimMargin())
@@ -147,15 +151,15 @@ object CPPGenerator : Generator {
             sb.append("""
                 |
                 |    // getter for ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
-                |    static $cppType get_field_${field.name.nameWithoutCollision}(const jobject &obj) {
-                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetFieldID(self(), MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
-                |        return ${BASE_NAMESPACE}::env->${second}(obj, fieldID);
+                |    static $cppType get_field_${field.name.nameWithoutCollision}(const jobject &obj, JNIEnv* _env = ${BASE_NAMESPACE}::env) {
+                |        const auto fieldID = _env->GetFieldID(self(), MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return _env->${second}(obj, fieldID);
                 |    };
                 |
                 |    // setter for static ${field.access.name.lowercase()} field ${`class`.name.dottedNormalName}#${`field`.name.normalName}
-                |    static void set_field_${field.name.nameWithoutCollision}(const jobject &obj, const $cppType &value) {
-                |        const auto fieldID = ${BASE_NAMESPACE}::env->GetFieldID(self(), MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
-                |        return ${BASE_NAMESPACE}::env->${third}(obj, fieldID, value);
+                |    static void set_field_${field.name.nameWithoutCollision}(const jobject &obj, const $cppType &value, JNIEnv* _env = ${BASE_NAMESPACE}::env) {
+                |        const auto fieldID = _env->GetFieldID(self(), MinecraftSDK::getRemapped($mappedParams), "${field.descriptor}");
+                |        return _env->${third}(obj, fieldID, value);
                 |    };
                 |
             """.trimMargin())
@@ -197,15 +201,14 @@ object CPPGenerator : Generator {
 
         sb.append("""
                 |
-                |    static jmethodID methodID_${method.name.nameWithoutCollision}() {
+                |    static jmethodID methodID_${method.name.nameWithoutCollision}(JNIEnv* _env = ${BASE_NAMESPACE}::env) {
                 |       const auto clazz = self();
-                |       return ${BASE_NAMESPACE}::env->Get${static}MethodID(clazz, MinecraftSDK::getRemapped($mappedParams), "${method.descriptor}");
+                |       return _env->Get${static}MethodID(clazz, MinecraftSDK::getRemapped($mappedParams), "${method.descriptor}");
                 |    }
                 |
-                |    static $result ${method.name.nameWithoutCollision}($argsString) {
-                ${if(call == "clazz") "|       const auto clazz = self();" else ""}
+                |    static $result ${method.name.nameWithoutCollision}($argsString${if(argsString.isNotEmpty()) ", " else ""}JNIEnv* _env = ${BASE_NAMESPACE}::env) {${if(call == "clazz") "\n|       const auto clazz = self();" else ""}
                 |       const auto methodID = methodID_${method.name.nameWithoutCollision}();
-                |       ${if(result != "void") "return " else ""}${BASE_NAMESPACE}::env->Call$static${if(result == "void") "Void" else result.drop(1).upperFirstLetter()}Method($call, methodID${if (updateArgs() && args.isNotEmpty()) ", " else ""}$argsNames);
+                |       ${if(result != "void") "return " else ""}_env->Call$static${if(result == "void") "Void" else result.drop(1).upperFirstLetter()}Method($call, methodID${if (updateArgs() && args.isNotEmpty()) ", " else ""}$argsNames);
                 |    };
                 |    
             """.trimMargin())
@@ -270,7 +273,15 @@ object CPPGenerator : Generator {
             |#define JNI_VERSION JNI_VERSION_1_6
             |
             |
-            |#define JSTRING(str) ($BASE_NAMESPACE::env)->NewStringUTF(str)
+            |#define JSTRING(str) ($BASE_NAMESPACE::env)->NewStringUTF(strz.c_str())
+            |
+            |#define EQUALS(x, y) (MinecraftSDK::isObjectsEqual(x, y))
+            |
+            |#define IS_INSTANCE(first, second) MinecraftSDK::env->IsInstanceOf(first, second)
+            |
+            |#define ENUM_ORDINAL(x) (MinecraftSDK::getEnumOrdinal(x))
+            |
+            |#define IS_NULL(env, jObject) (env)->IsSameObject(jObject, nullptr)
             |
             |#define JSTRING_TO_STD_STRING(jObj) \
             |    ([&]() -> std::string { \
@@ -297,6 +308,26 @@ object CPPGenerator : Generator {
             |        YARN,
             |        SEARGE
             |    };
+            |    
+            |    static jint getEnumOrdinal(jobject enumObject, JNIEnv* _env = MinecraftSDK::env) {
+            |        jclass enumClass = _env->GetObjectClass(enumObject);
+            |        auto ordinalFieldID = _env->GetFieldID(enumClass, "ordinal", "I");
+            |
+            |        jint ordinal = _env->GetIntField(enumObject, ordinalFieldID);
+            |        return ordinal;
+            |    }
+            | 
+            |    static bool isObjectsEqual(const jobject &obj1, const jobject &obj2, JNIEnv* env = MinecraftSDK::env) {
+            |        if (obj1 == nullptr || obj2 == nullptr) {
+            |            return false;
+            |        }
+            |
+            |        if(env->IsSameObject(obj1, obj2)) {
+            |            return true;
+            |        }
+            |
+            |        return false;
+            |    }
             | 
             |    static Mappings selectedMapping;
             |
